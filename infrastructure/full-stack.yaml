@@ -1,0 +1,118 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  FINAL MULTI-SERVICE STACK. Creates VPC, EKS Cluster, ECR Repos, DynamoDB Tables,
+  RDS Postgres DB, S3 Bucket, Cognito User Pool, HTTP API Gateway, WebSocket API Gateway,
+  and a Lambda for WebSocket connection management.
+  WARNING: This creates AWS resources which will incur costs.
+
+Parameters:
+  ClusterName: { Type: String, Default: skillbridge-cluster }
+  DBPassword: { Type: String, NoEcho: true, Description: "Password for the RDS database master user." }
+  StripeSecretKey: { Type: String, NoEcho: true, Description: "Your Stripe SECRET test key (sk_test_...)." }
+
+Resources:
+  # SECTION 1: NETWORKING
+  VPC: { Type: AWS::EC2::VPC, Properties: { CidrBlock: 10.0.0.0/16, EnableDnsSupport: true, EnableDnsHostnames: true, Tags: [{Key: Name, Value: !Ref ClusterName}] } }
+  PublicSubnet1: { Type: AWS::EC2::Subnet, Properties: { VpcId: !Ref VPC, CidrBlock: 10.0.1.0/24, AvailabilityZone: !Select [0, !GetAZs ''], MapPublicIpOnLaunch: true, Tags: [{Key: Name, Value: !Sub "${ClusterName}-PublicSubnet1"}, {Key: "kubernetes.io/cluster/${ClusterName}", Value: shared}, {Key: "kubernetes.io/role/elb", Value: "1"}] } }
+  PublicSubnet2: { Type: AWS::EC2::Subnet, Properties: { VpcId: !Ref VPC, CidrBlock: 10.0.2.0/24, AvailabilityZone: !Select [1, !GetAZs ''], MapPublicIpOnLaunch: true, Tags: [{Key: Name, Value: !Sub "${ClusterName}-PublicSubnet2"}, {Key: "kubernetes.io/cluster/${ClusterName}", Value: shared}, {Key: "kubernetes.io/role/elb", Value: "1"}] } }
+  InternetGateway: { Type: AWS::EC2::InternetGateway, Properties: { Tags: [{Key: Name, Value: !Ref ClusterName}] } }
+  VPCGatewayAttachment: { Type: AWS::EC2::VPCGatewayAttachment, Properties: { VpcId: !Ref VPC, InternetGatewayId: !Ref InternetGateway } }
+  PublicRouteTable: { Type: AWS::EC2::RouteTable, Properties: { VpcId: !Ref VPC, Tags: [{Key: Name, Value: !Sub "${ClusterName}-PublicRouteTable"}] } }
+  PublicRoute: { Type: AWS::EC2::Route, Properties: { RouteTableId: !Ref PublicRouteTable, DestinationCidrBlock: 0.0.0.0/0, GatewayId: !Ref InternetGateway } }
+  Subnet1RouteTableAssociation: { Type: AWS::EC2::SubnetRouteTableAssociation, Properties: { SubnetId: !Ref PublicSubnet1, RouteTableId: !Ref PublicRouteTable } }
+  Subnet2RouteTableAssociation: { Type: AWS::EC2::SubnetRouteTableAssociation, Properties: { SubnetId: !Ref PublicSubnet2, RouteTableId: !Ref PublicRouteTable } }
+  DBSecurityGroup: { Type: AWS::EC2::SecurityGroup, Properties: { GroupDescription: "Allow traffic from EKS nodes to RDS", VpcId: !Ref VPC, SecurityGroupIngress: [{IpProtocol: tcp, FromPort: 5432, ToPort: 5432, CidrIp: 10.0.0.0/16}] } }
+
+  # SECTION 2: IAM ROLES
+  EKSClusterRole: { Type: AWS::IAM::Role, Properties: { AssumeRolePolicyDocument: {Version: '2012-10-17', Statement: [{Effect: Allow, Principal: {Service: eks.amazonaws.com}, Action: "sts:AssumeRole"}]}, ManagedPolicyArns: ['arn:aws:iam::aws:policy/AmazonEKSClusterPolicy'] } }
+  EKSNodeRole: { Type: AWS::IAM::Role, Properties: { AssumeRolePolicyDocument: {Version: '2012-10-17', Statement: [{Effect: Allow, Principal: {Service: ec2.amazonaws.com}, Action: "sts:AssumeRole"}]}, ManagedPolicyArns: ['arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy', 'arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly', 'arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy', 'arn:aws:iam::aws:policy/AmazonS3FullAccess', 'arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess'] } }
+  LambdaExecutionRole: { Type: AWS::IAM::Role, Properties: { AssumeRolePolicyDocument: {Version: '2012-10-17', Statement: [{Effect: Allow, Principal: {Service: lambda.amazonaws.com}, Action: 'sts:AssumeRole'}]}, ManagedPolicyArns: ['arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole', 'arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess'] } }
+
+  # SECTION 3: EKS CLUSTER
+  EKSCluster: { Type: AWS::EKS::Cluster, Properties: { Name: !Ref ClusterName, Version: '1.28', RoleArn: !GetAtt EKSClusterRole.Arn, ResourcesVpcConfig: { SubnetIds: [!Ref PublicSubnet1, !Ref PublicSubnet2] } } }
+  EKSNodeGroup: { Type: AWS::EKS::Nodegroup, Properties: { ClusterName: !Ref ClusterName, NodegroupName: !Sub "${ClusterName}-nodegroup", NodeRole: !GetAtt EKSNodeRole.Arn, Subnets: [!Ref PublicSubnet1, !Ref PublicSubnet2], InstanceTypes: ["t3.medium"], ScalingConfig: {MinSize: 2, DesiredSize: 3, MaxSize: 4} }, DependsOn: EKSCluster }
+  
+  # SECTION 4: ECR REPOSITORIES
+  UserServiceRepository: { Type: AWS::ECR::Repository, Properties: { RepositoryName: skillbridge/user-service } }
+  BookingServiceRepository: { Type: AWS::ECR::Repository, Properties: { RepositoryName: skillbridge/booking-service } }
+  CodeReviewServiceRepository: { Type: AWS::ECR::Repository, Properties: { RepositoryName: skillbridge/code-review-service } }
+  MessagingServiceRepository: { Type: AWS::ECR::Repository, Properties: { RepositoryName: skillbridge/messaging-service } }
+  PaymentServiceRepository: { Type: AWS::ECR::Repository, Properties: { RepositoryName: skillbridge/payment-service } }
+  WebRTCServiceRepository: { Type: AWS::ECR::Repository, Properties: { RepositoryName: skillbridge/webrtc-signaling-service } }
+
+  # SECTION 5: DATABASES & STORAGE
+  UsersTable: { Type: AWS::DynamoDB::Table, Properties: { TableName: SkillBridgeUsers, AttributeDefinitions: [{AttributeName: "id", AttributeType: "S"}], KeySchema: [{AttributeName: "id", KeyType: "HASH"}], ProvisionedThroughput: {ReadCapacityUnits: 1, WriteCapacityUnits: 1} } }
+  MessagesTable: { Type: AWS::DynamoDB::Table, Properties: { TableName: SkillBridgeMessages, AttributeDefinitions: [{AttributeName: "messageId", AttributeType: "S"}], KeySchema: [{AttributeName: "messageId", KeyType: "HASH"}], ProvisionedThroughput: {ReadCapacityUnits: 1, WriteCapacityUnits: 1} } }
+  ConnectionsTable: { Type: AWS::DynamoDB::Table, Properties: { TableName: SkillBridgeConnections, AttributeDefinitions: [{AttributeName: "connectionId", AttributeType: "S"}], KeySchema: [{AttributeName: "connectionId", KeyType: "HASH"}], ProvisionedThroughput: {ReadCapacityUnits: 1, WriteCapacityUnits: 1} } }
+  CodeReviewBucket: { Type: AWS::S3::Bucket, Properties: { BucketName: !Sub "skillbridge-codereviews-${AWS::AccountId}" } }
+  SkillBridgeDB: { Type: AWS::RDS::DBInstance, Properties: { DBName: SkillBridgeDB, Engine: postgres, EngineVersion: '14.5', MasterUsername: postgres, MasterUserPassword: !Ref DBPassword, DBInstanceClass: db.t3.micro, AllocatedStorage: '20', PubliclyAccessible: false, VPCSecurityGroups: [!Ref DBSecurityGroup], DBSubnetGroupName: !Ref DBSubnetGroup } }
+  DBSubnetGroup: { Type: AWS::RDS::DBSubnetGroup, Properties: { DBSubnetGroupDescription: "Subnet group for SkillBridge RDS", SubnetIds: [!Ref PublicSubnet1, !Ref PublicSubnet2] } }
+
+  # SECTION 6: KUBERNETES SECRETS
+  DBSecrets: { Type: "AWS::Kubernetes::Secret", Properties: { ClusterName: !Ref EKSCluster, Name: db-credentials, Namespace: default, StringData: { DB_HOST: !GetAtt SkillBridgeDB.Endpoint.Address, DB_PORT: !GetAtt SkillBridgeDB.Endpoint.Port, DB_USER: postgres, DB_PASSWORD: !Ref DBPassword, DB_NAME: SkillBridgeDB } } }
+  StripeSecret: { Type: "AWS::Kubernetes::Secret", Properties: { ClusterName: !Ref EKSCluster, Name: stripe-credentials, Namespace: default, StringData: { STRIPE_SECRET_KEY: !Ref StripeSecretKey } } }
+  
+  # SECTION 7: AUTHENTICATION
+  CognitoUserPool: { Type: AWS::Cognito::UserPool, Properties: { UserPoolName: SkillBridgeUserPool, Schema: [{Name: email, AttributeDataType: String, Mutable: true, Required: true}], Policies: {PasswordPolicy: {MinimumLength: 8}}, AutoVerifiedAttributes: [email] } }
+  CognitoUserPoolClient: { Type: AWS::Cognito::UserPoolClient, Properties: { ClientName: SkillBridgeWebAppClient, UserPoolId: !Ref CognitoUserPool, GenerateSecret: false } }
+  
+  # SECTION 8: API GATEWAY (HTTP)
+  HttpApi: { Type: AWS::ApiGatewayV2::Api, Properties: { Name: SkillBridgeApi, ProtocolType: HTTP, CorsConfiguration: {AllowOrigins: ["*"], AllowMethods: ["GET", "POST", "PUT", "OPTIONS"], AllowHeaders: ["Content-Type", "Authorization"]} } }
+  HttpApiStage: { Type: AWS::ApiGatewayV2::Stage, Properties: { ApiId: !Ref HttpApi, StageName: '$default', AutoDeploy: true } }
+  VpcLink: { Type: AWS::ApiGatewayV2::VpcLink, Properties: { Name: SkillBridgeVpcLink, SubnetIds: [!Ref PublicSubnet1, !Ref PublicSubnet2] } }
+  CognitoAuthorizer: { Type: AWS::ApiGatewayV2::Authorizer, Properties: { ApiId: !Ref HttpApi, AuthorizerType: JWT, IdentitySource: ["$request.header.Authorization"], JwtConfiguration: {Audience: [!Ref CognitoUserPoolClient], Issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${CognitoUserPool}"}, Name: CognitoAuthorizer } }
+  
+  # Integrations (Internal NLBs for services in Kubernetes will create these endpoints)
+  UserSvcIntegration: { Type: AWS::ApiGatewayV2::Integration, Properties: { ApiId: !Ref HttpApi, IntegrationType: HTTP_PROXY, IntegrationMethod: ANY, IntegrationUri: !Sub "http://${UserSvcInternalNLB.DNSName}", ConnectionType: VPC_LINK, ConnectionId: !Ref VpcLink, PayloadFormatVersion: '1.0' } }
+  BookingSvcIntegration: { Type: AWS::ApiGatewayV2::Integration, Properties: { ApiId: !Ref HttpApi, IntegrationType: HTTP_PROXY, IntegrationMethod: ANY, IntegrationUri: !Sub "http://${BookingSvcInternalNLB.DNSName}", ConnectionType: VPC_LINK, ConnectionId: !Ref VpcLink, PayloadFormatVersion: '1.0' } }
+  CodeReviewSvcIntegration: { Type: AWS::ApiGatewayV2::Integration, Properties: { ApiId: !Ref HttpApi, IntegrationType: HTTP_PROXY, IntegrationMethod: ANY, IntegrationUri: !Sub "http://${CodeReviewSvcInternalNLB.DNSName}", ConnectionType: VPC_LINK, ConnectionId: !Ref VpcLink, PayloadFormatVersion: '1.0' } }
+  MessagingSvcIntegration: { Type: AWS::ApiGatewayV2::Integration, Properties: { ApiId: !Ref HttpApi, IntegrationType: HTTP_PROXY, IntegrationMethod: ANY, IntegrationUri: !Sub "http://${MessagingSvcInternalNLB.DNSName}", ConnectionType: VPC_LINK, ConnectionId: !Ref VpcLink, PayloadFormatVersion: '1.0' } }
+  PaymentSvcIntegration: { Type: AWS::ApiGatewayV2::Integration, Properties: { ApiId: !Ref HttpApi, IntegrationType: HTTP_PROXY, IntegrationMethod: ANY, IntegrationUri: !Sub "http://${PaymentSvcInternalNLB.DNSName}", ConnectionType: VPC_LINK, ConnectionId: !Ref VpcLink, PayloadFormatVersion: '1.0' } }
+
+  # Routes (Points API endpoints to integrations)
+  UserRoute: { Type: AWS::ApiGatewayV2::Route, Properties: { ApiId: !Ref HttpApi, RouteKey: 'GET /users', Target: !Sub "integrations/${UserSvcIntegration}", AuthorizerId: !Ref CognitoAuthorizer, AuthorizationType: JWT } }
+  CreateBookingRoute: { Type: AWS::ApiGatewayV2::Route, Properties: { ApiId: !Ref HttpApi, RouteKey: 'POST /bookings', Target: !Sub "integrations/${BookingSvcIntegration}", AuthorizerId: !Ref CognitoAuthorizer, AuthorizationType: JWT } }
+  CreateReviewRoute: { Type: AWS::ApiGatewayV2::Route, Properties: { ApiId: !Ref HttpApi, RouteKey: 'POST /reviews', Target: !Sub "integrations/${CodeReviewSvcIntegration}", AuthorizerId: !Ref CognitoAuthorizer, AuthorizationType: JWT } }
+  SendMessageRoute: { Type: AWS::ApiGatewayV2::Route, Properties: { ApiId: !Ref HttpApi, RouteKey: 'POST /messages', Target: !Sub "integrations/${MessagingSvcIntegration}", AuthorizerId: !Ref CognitoAuthorizer, AuthorizationType: JWT } }
+  PaymentIntentRoute: { Type: AWS::ApiGatewayV2::Route, Properties: { ApiId: !Ref HttpApi, RouteKey: 'POST /create-payment-intent', Target: !Sub "integrations/${PaymentSvcIntegration}", AuthorizerId: !Ref CognitoAuthorizer, AuthorizationType: JWT } }
+
+  # SECTION 9: API GATEWAY (WebSocket)
+  WebSocketApi: { Type: AWS::ApiGatewayV2::Api, Properties: { Name: SkillBridgeWebSocketApi, ProtocolType: WEBSOCKET, RouteSelectionExpression: "$request.body.action" } }
+  WebSocketApiStage: { Type: AWS::ApiGatewayV2::Stage, Properties: { ApiId: !Ref WebSocketApi, StageName: 'prod', AutoDeploy: true } }
+  ConnectIntegration: { Type: AWS::ApiGatewayV2::Integration, Properties: { ApiId: !Ref WebSocketApi, IntegrationType: AWS_PROXY, IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ConnectionHandlerLambda.Arn}/invocations" } }
+  DisconnectIntegration: { Type: AWS::ApiGatewayV2::Integration, Properties: { ApiId: !Ref WebSocketApi, IntegrationType: AWS_PROXY, IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ConnectionHandlerLambda.Arn}/invocations" } }
+  ConnectRoute: { Type: AWS::ApiGatewayV2::Route, Properties: { ApiId: !Ref WebSocketApi, RouteKey: '$connect', Target: !Sub "integrations/${ConnectIntegration}", AuthorizationType: NONE } }
+  DisconnectRoute: { Type: AWS::ApiGatewayV2::Route, Properties: { ApiId: !Ref WebSocketApi, RouteKey: '$disconnect', Target: !Sub "integrations/${DisconnectIntegration}", AuthorizationType: NONE } }
+  
+  # SECTION 10: LAMBDA for WebSocket Connections
+  ConnectionHandlerLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: SkillBridgeConnectionHandler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: nodejs18.x
+      Handler: index.handler
+      Code:
+        ZipFile: |
+          const AWS = require('aws-sdk');
+          const ddb = new AWS.DynamoDB.DocumentClient();
+          exports.handler = async (event) => {
+            const connectionId = event.requestContext.connectionId;
+            const routeKey = event.requestContext.routeKey;
+            if (routeKey === '$connect') {
+              const email = event.queryStringParameters.email;
+              await ddb.put({ TableName: 'SkillBridgeConnections', Item: { connectionId: connectionId, email: email } }).promise();
+            } else if (routeKey === '$disconnect') {
+              await ddb.delete({ TableName: 'SkillBridgeConnections', Key: { connectionId: connectionId } }).promise();
+            }
+            return { statusCode: 200, body: 'OK' };
+          };
+      Environment: { Variables: { TABLE_NAME: !Ref ConnectionsTable } }
+
+Outputs:
+  UserPoolId: { Value: !Ref CognitoUserPool }
+  UserPoolClientId: { Value: !Ref CognitoUserPoolClient }
+  ApiGatewayEndpoint: { Value: !GetAtt HttpApi.ApiEndpoint }
+  WebSocketApiEndpoint: { Value: !Sub "wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/prod" }
+  CodeReviewBucketName: { Value: !Ref CodeReviewBucket }
+

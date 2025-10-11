@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: messaging-service-deployment
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: messaging-service
+  template:
+    metadata:
+      labels:
+        app: messaging-service
+    spec:
+      containers:
+      - name: messaging-service
+        image: YOUR_AWS_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/skillbridge/messaging-service:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: AWS_REGION
+          value: "us-east-1"
+        - name: MESSAGES_TABLE_NAME
+          value: "SkillBridgeMessages"
+        - name: CONNECTIONS_TABLE_NAME
+          value: "SkillBridgeConnections"
+        # This endpoint is crucial. It will be substituted by the CI/CD pipeline.
+        - name: WEBSOCKET_API_ENDPOINT
+          value: "https://YOUR_WEBSOCKET_API_ENDPOINT"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: messaging-service-internal-nlb
+  namespace: default
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internal"
+spec:
+  type: LoadBalancer
+  selector:
+    app: messaging-service
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
