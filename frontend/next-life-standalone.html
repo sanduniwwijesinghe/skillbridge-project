@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Next Life - Discover Your Future</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .animate-fade-in { animation: fadeIn 0.5s ease-in; }
+        .animate-slide-up { animation: slideUp 0.5s ease-out; }
+        .delay-1 { animation-delay: 0.2s; animation-fill-mode: both; }
+        .delay-2 { animation-delay: 0.4s; animation-fill-mode: both; }
+        .delay-3 { animation-delay: 0.6s; animation-fill-mode: both; }
+        .delay-4 { animation-delay: 0.8s; animation-fill-mode: both; }
+    </style>
+</head>
+<body class="bg-black text-white">
+    <div id="app"></div>
+
+    <script>
+        // Game Data
+        const questions = [
+            {
+                id: 1,
+                question: "You're offered a mysterious door that leads to an unknown adventure. What do you do?",
+                options: [
+                    { text: "Step through immediately - adventure awaits!", traits: ['adventurous', 'risktaker'] },
+                    { text: "Study the door carefully first, then decide", traits: ['logical', 'intellectual'] },
+                    { text: "Invite others to explore it together", traits: ['helping', 'calm'] },
+                    { text: "Decline - I prefer what I know", traits: ['safe', 'calm'] },
+                ]
+            },
+            {
+                id: 2,
+                question: "How do you prefer to spend your free time?",
+                options: [
+                    { text: "Creating art, music, or writing", traits: ['artistic', 'creative'] },
+                    { text: "Reading, learning, solving puzzles", traits: ['intellectual', 'logical'] },
+                    { text: "Helping friends or volunteering", traits: ['helping', 'calm'] },
+                    { text: "Seeking thrills and new experiences", traits: ['adventurous', 'risktaker'] },
+                ]
+            },
+            {
+                id: 3,
+                question: "A stranger asks for your help on a difficult problem. You:",
+                options: [
+                    { text: "Drop everything to assist them", traits: ['helping', 'calm'] },
+                    { text: "Analyze the problem logically first", traits: ['logical', 'intellectual'] },
+                    { text: "Suggest a creative, unconventional solution", traits: ['creative', 'artistic'] },
+                    { text: "Politely decline - you have your own path", traits: ['independent', 'safe'] },
+                ]
+            },
+            {
+                id: 4,
+                question: "Your ideal environment would be:",
+                options: [
+                    { text: "A quiet library or research lab", traits: ['intellectual', 'calm', 'logical'] },
+                    { text: "An artist's studio filled with inspiration", traits: ['artistic', 'creative'] },
+                    { text: "The wilderness, mountains, or ocean", traits: ['adventurous', 'independent'] },
+                    { text: "A community center helping others", traits: ['helping', 'calm'] },
+                ]
+            },
+            {
+                id: 5,
+                question: "When facing a major life decision, you:",
+                options: [
+                    { text: "Trust your gut and take the leap", traits: ['risktaker', 'adventurous'] },
+                    { text: "Make a detailed pro/con list", traits: ['logical', 'intellectual', 'safe'] },
+                    { text: "Consult with loved ones first", traits: ['helping', 'calm'] },
+                    { text: "Look for the most creative option", traits: ['creative', 'artistic'] },
+                ]
+            },
+            {
+                id: 6,
+                question: "What drives you most in life?",
+                options: [
+                    { text: "Making a positive impact on others", traits: ['helping', 'calm'] },
+                    { text: "Discovering truth and knowledge", traits: ['intellectual', 'logical'] },
+                    { text: "Expressing yourself creatively", traits: ['artistic', 'creative'] },
+                    { text: "Experiencing everything the world offers", traits: ['adventurous', 'risktaker'] },
+                ]
+            },
+            {
+                id: 7,
+                question: "Your approach to challenges is:",
+                options: [
+                    { text: "Face them head-on with courage", traits: ['risktaker', 'adventurous'] },
+                    { text: "Analyze and strategize carefully", traits: ['logical', 'intellectual'] },
+                    { text: "Find an innovative, creative angle", traits: ['creative', 'artistic'] },
+                    { text: "Seek support and collaborate", traits: ['helping', 'calm'] },
+                ]
+            },
+            {
+                id: 8,
+                question: "If you could have one superpower:",
+                options: [
+                    { text: "Healing others and bringing peace", traits: ['helping', 'calm'] },
+                    { text: "Super intelligence and wisdom", traits: ['intellectual', 'logical'] },
+                    { text: "Ability to create anything from imagination", traits: ['creative', 'artistic'] },
+                    { text: "Teleportation to explore the universe", traits: ['adventurous', 'risktaker'] },
+                ]
+            },
+            {
+                id: 9,
+                question: "Your biggest fear is:",
+                options: [
+                    { text: "Never achieving anything meaningful", traits: ['adventurous', 'independent'] },
+                    { text: "Being trapped in routine and boredom", traits: ['creative', 'risktaker'] },
+                    { text: "Not understanding the world's mysteries", traits: ['intellectual', 'logical'] },
+                    { text: "Failing to help those in need", traits: ['helping', 'calm'] },
+                ]
+            },
+            {
+                id: 10,
+                question: "The legacy you want to leave is:",
+                options: [
+                    { text: "Beautiful art or inspiring creations", traits: ['artistic', 'creative'] },
+                    { text: "Revolutionary discoveries or insights", traits: ['intellectual', 'logical'] },
+                    { text: "A community you helped thrive", traits: ['helping', 'calm'] },
+                    { text: "Stories of extraordinary adventures", traits: ['adventurous', 'risktaker', 'independent'] },
+                ]
+            }
+        ];
+
+        const nextLives = [
+            {
+                id: 'explorer',
+                title: 'Space Explorer on a New Planet',
+                description: 'You\'ll be among the first humans to set foot on an alien world, discovering new forms of life and pushing the boundaries of human knowledge.',
+                reasoning: 'Your adventurous spirit and risk-taking nature make you perfect for venturing into the unknown cosmos.',
+                emoji: '🚀',
+                requiredTraits: ['adventurous', 'risktaker', 'independent'],
+            },
+            {
+                id: 'photographer',
+                title: 'Wildlife Photographer in the Amazon',
+                description: 'You\'ll travel the world capturing the beauty of endangered species, raising awareness through your breathtaking imagery.',
+                reasoning: 'Your artistic vision combined with your love for adventure creates the perfect wildlife storyteller.',
+                emoji: '📸',
+                requiredTraits: ['artistic', 'adventurous', 'independent'],
+            },
+            {
+                id: 'monk',
+                title: 'Monk in the Himalayas',
+                description: 'You\'ll find peace in mountain monasteries, helping seekers find enlightenment and inner calm through ancient wisdom.',
+                reasoning: 'Your calm nature and desire to help others leads you to a life of spiritual guidance and tranquility.',
+                emoji: '🧘',
+                requiredTraits: ['calm', 'helping', 'intellectual'],
+            },
+            {
+                id: 'founder',
+                title: 'Visionary Startup Founder',
+                description: 'You\'ll build revolutionary companies that change how people live, taking bold risks to create the future.',
+                reasoning: 'Your risk-taking spirit, creative thinking, and independence make you a natural entrepreneur and innovator.',
+                emoji: '💡',
+                requiredTraits: ['risktaker', 'creative', 'independent'],
+            },
+            {
+                id: 'scientist',
+                title: 'Quantum Physicist in 2150',
+                description: 'You\'ll unlock the secrets of the universe, making breakthrough discoveries in quantum mechanics and space-time.',
+                reasoning: 'Your logical mind and intellectual curiosity drive you to solve the cosmos\' greatest mysteries.',
+                emoji: '⚛️',
+                requiredTraits: ['intellectual', 'logical'],
+            },
+            {
+                id: 'artist',
+                title: 'Revolutionary Artist in a Future Renaissance',
+                description: 'You\'ll create masterpieces that redefine art itself, inspiring millions with your innovative and emotional works.',
+                reasoning: 'Your creative soul and artistic vision mark you as one of history\'s great creative minds.',
+                emoji: '🎨',
+                requiredTraits: ['artistic', 'creative'],
+            },
+            {
+                id: 'healer',
+                title: 'Doctor Without Borders',
+                description: 'You\'ll travel to the world\'s most challenging places, bringing healing and hope to those who need it most.',
+                reasoning: 'Your deep desire to help others and calm, steady nature make you a beacon of compassion.',
+                emoji: '🏥',
+                requiredTraits: ['helping', 'calm', 'logical'],
+            },
+            {
+                id: 'inventor',
+                title: 'Mad Inventor and Eccentric Genius',
+                description: 'You\'ll create impossible machines and fantastical contraptions that blur the line between magic and science.',
+                reasoning: 'Your creative, logical mind sees solutions where others see impossibilities.',
+                emoji: '⚙️',
+                requiredTraits: ['creative', 'logical', 'independent'],
+            },
+            {
+                id: 'teacher',
+                title: 'Beloved Teacher Shaping Young Minds',
+                description: 'You\'ll inspire generations of students, helping them discover their potential and pursue their dreams.',
+                reasoning: 'Your intellectual nature and passion for helping others makes you the perfect mentor and guide.',
+                emoji: '📚',
+                requiredTraits: ['helping', 'intellectual', 'calm'],
+            },
+            {
+                id: 'adventurer',
+                title: 'Deep Sea Explorer and Marine Biologist',
+                description: 'You\'ll dive to the ocean\'s darkest depths, discovering species never seen by human eyes.',
+                reasoning: 'Your adventurous spirit and intellectual curiosity draw you to Earth\'s last frontier.',
+                emoji: '🌊',
+                requiredTraits: ['adventurous', 'intellectual', 'risktaker'],
+            },
+            {
+                id: 'time-traveler',
+                title: 'Time Traveler and Guardian of History',
+                description: 'You\'ll hop through different eras, witnessing humanity\'s greatest moments and ensuring the timeline stays intact.',
+                reasoning: 'Your unique combination of traits has caught the attention of the Time Council. Welcome to the most exciting job in any century!',
+                emoji: '⏰',
+                requiredTraits: [],
+                isSecret: true,
+            },
+            {
+                id: 'cosmic-artist',
+                title: 'Cosmic Artist Painting with Nebulas',
+                description: 'You\'ll create art on a universal scale, using stars and galaxies as your canvas in the void of space.',
+                reasoning: 'The universe has recognized your creative spirit is too vast for just one planet. Time to paint among the stars!',
+                emoji: '✨',
+                requiredTraits: [],
+                isSecret: true,
+            }
+        ];
+
+        // Game Logic
+        function calculateTraitScores(answerTraits) {
+            const scores = {};
+            answerTraits.flat().forEach(trait => {
+                scores[trait] = (scores[trait] || 0) + 1;
+            });
+            return scores;
+        }
+
+        function getDominantTraits(scores) {
+            return Object.entries(scores)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 3)
+                .map(([trait]) => trait);
+        }
+
+        function calculateMatchScore(userTraits, resultTraits) {
+            let score = 0;
+            resultTraits.forEach(requiredTrait => {
+                const index = userTraits.indexOf(requiredTrait);
+                if (index !== -1) {
+                    score += (3 - index) * 2;
+                }
+            });
+            return score;
+        }
+
+        function determineNextLife(answerTraits) {
+            if (Math.random() < 0.1) {
+                const secretLives = nextLives.filter(life => life.isSecret);
+                return secretLives[Math.floor(Math.random() * secretLives.length)];
+            }
+
+            const scores = calculateTraitScores(answerTraits);
+            const dominantTraits = getDominantTraits(scores);
+            const regularLives = nextLives.filter(life => !life.isSecret);
+
+            let bestMatch = regularLives[0];
+            let bestScore = -1;
+
+            regularLives.forEach(life => {
+                const matchScore = calculateMatchScore(dominantTraits, life.requiredTraits);
+                if (matchScore > bestScore) {
+                    bestScore = matchScore;
+                    bestMatch = life;
+                }
+            });
+
+            return bestMatch;
+        }
+
+        function getTraitSummary(answerTraits) {
+            const scores = calculateTraitScores(answerTraits);
+            const dominantTraits = getDominantTraits(scores);
+            return dominantTraits.map(trait => trait.charAt(0).toUpperCase() + trait.slice(1)).join(', ');
+        }
+
+        // Game State
+        let gameState = 'landing';
+        let currentQuestionIndex = 0;
+        let answers = [];
+        let result = null;
+
+        // Render Functions
+        function renderLanding() {
+            return `
+                <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-900 via-blue-900 to-black p-4">
+                    <div class="max-w-2xl w-full text-center animate-fade-in">
+                        <h1 class="text-6xl md:text-8xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600 mb-6 animate-slide-up">
+                            Next Life
+                        </h1>
+                        <p class="text-xl md:text-2xl text-gray-300 mb-4 animate-slide-up delay-1">
+                            Discover Who You Might Be
+                        </p>
+                        <p class="text-base md:text-lg text-gray-400 mb-12 max-w-lg mx-auto animate-slide-up delay-2">
+                            Answer a few questions and discover who you might be in your next life.
+                            Will you explore distant galaxies, create timeless art, or bring peace to the world?
+                        </p>
+                        <button onclick="startGame()"
+                                class="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-lg font-semibold rounded-full
+                                       hover:from-purple-700 hover:to-pink-700 transform hover:scale-105 transition-all duration-300
+                                       shadow-lg hover:shadow-2xl animate-slide-up delay-3">
+                            Begin Your Journey
+                        </button>
+                        <p class="text-sm text-gray-500 mt-8 animate-fade-in delay-4">
+                            ✨ Hint: There might be some rare surprises waiting...
+                        </p>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderQuestion() {
+            const question = questions[currentQuestionIndex];
+            const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
+
+            return `
+                <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-900 via-purple-900 to-black p-4">
+                    <div class="max-w-3xl w-full">
+                        <div class="mb-8 animate-fade-in">
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-sm text-gray-400">Question ${currentQuestionIndex + 1} of ${questions.length}</span>
+                                <span class="text-sm text-gray-400">${Math.round(progress)}%</span>
+                            </div>
+                            <div class="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
+                                <div class="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500 ease-out"
+                                     style="width: ${progress}%"></div>
+                            </div>
+                        </div>
+                        <div class="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-8 shadow-2xl border border-gray-700 animate-slide-up">
+                            <h2 class="text-2xl md:text-3xl font-bold text-white mb-8 text-center">
+                                ${question.question}
+                            </h2>
+                            <div class="space-y-4">
+                                ${question.options.map((option, index) => `
+                                    <button onclick="handleAnswer(${index})"
+                                            class="w-full p-5 bg-gray-700/50 hover:bg-purple-600/30 text-white text-left rounded-xl
+                                                   transition-all duration-300 transform hover:scale-102 hover:shadow-lg
+                                                   border border-gray-600 hover:border-purple-500 group">
+                                        <div class="flex items-center">
+                                            <span class="flex-shrink-0 w-8 h-8 rounded-full bg-purple-600/30 group-hover:bg-purple-600
+                                                         flex items-center justify-center mr-4 transition-colors duration-300 text-center">
+                                                ${String.fromCharCode(65 + index)}
+                                            </span>
+                                            <span class="text-base md:text-lg">${option.text}</span>
+                                        </div>
+                                    </button>
+                                `).join('')}
+                            </div>
+                        </div>
+                        <div class="mt-6 text-center text-gray-500 text-sm animate-fade-in">
+                            Choose the answer that resonates most with you
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderResult() {
+            const traitSummary = getTraitSummary(answers);
+
+            return `
+                <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-900 via-blue-900 to-black p-4">
+                    <div class="max-w-3xl w-full">
+                        <div class="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-8 md:p-12 shadow-2xl border border-gray-700 animate-fade-in">
+                            ${result.isSecret ? `
+                                <div class="mb-6 text-center animate-slide-up">
+                                    <span class="inline-block px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-black font-bold rounded-full text-sm">
+                                        ✨ RARE RESULT ✨
+                                    </span>
+                                </div>
+                            ` : ''}
+                            <div class="text-center mb-8 animate-slide-up delay-1">
+                                <div class="text-7xl md:text-9xl mb-4">${result.emoji}</div>
+                                <h1 class="text-3xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600 mb-4">
+                                    Your Next Life
+                                </h1>
+                                <h2 class="text-2xl md:text-3xl font-semibold text-white mb-2">
+                                    ${result.title}
+                                </h2>
+                            </div>
+                            <div class="mb-8 animate-slide-up delay-2">
+                                <p class="text-lg md:text-xl text-gray-300 text-center leading-relaxed">
+                                    ${result.description}
+                                </p>
+                            </div>
+                            <div class="bg-purple-900/30 border border-purple-700/50 rounded-xl p-6 mb-8 animate-slide-up delay-3">
+                                <h3 class="text-lg font-semibold text-purple-300 mb-3 flex items-center">
+                                    <span class="mr-2">🔮</span>
+                                    Why This Result?
+                                </h3>
+                                <p class="text-gray-300 leading-relaxed">
+                                    ${result.reasoning}
+                                </p>
+                            </div>
+                            <div class="bg-blue-900/30 border border-blue-700/50 rounded-xl p-6 mb-8 animate-slide-up delay-4">
+                                <h3 class="text-lg font-semibold text-blue-300 mb-3 flex items-center">
+                                    <span class="mr-2">⭐</span>
+                                    Your Dominant Traits
+                                </h3>
+                                <p class="text-gray-300">
+                                    ${traitSummary}
+                                </p>
+                            </div>
+                            <div class="text-center animate-slide-up delay-4">
+                                <button onclick="playAgain()"
+                                        class="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-lg font-semibold rounded-full
+                                               hover:from-purple-700 hover:to-pink-700 transform hover:scale-105 transition-all duration-300
+                                               shadow-lg hover:shadow-2xl">
+                                    Discover Another Life
+                                </button>
+                                <p class="text-sm text-gray-500 mt-4">
+                                    Your answers are always unique - try again for a different result!
+                                </p>
+                            </div>
+                        </div>
+                        <div class="mt-6 text-center text-gray-500 text-sm animate-fade-in">
+                            Share your next life with friends and see what they get!
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function render() {
+            const app = document.getElementById('app');
+            if (gameState === 'landing') {
+                app.innerHTML = renderLanding();
+            } else if (gameState === 'questions') {
+                app.innerHTML = renderQuestion();
+            } else if (gameState === 'result') {
+                app.innerHTML = renderResult();
+            }
+        }
+
+        // Event Handlers
+        function startGame() {
+            gameState = 'questions';
+            currentQuestionIndex = 0;
+            answers = [];
+            result = null;
+            render();
+        }
+
+        function handleAnswer(optionIndex) {
+            const question = questions[currentQuestionIndex];
+            const selectedTraits = question.options[optionIndex].traits;
+            answers.push(selectedTraits);
+
+            if (currentQuestionIndex < questions.length - 1) {
+                currentQuestionIndex++;
+                render();
+            } else {
+                result = determineNextLife(answers);
+                gameState = 'result';
+                render();
+            }
+        }
+
+        function playAgain() {
+            startGame();
+        }
+
+        // Initialize
+        render();
+    </script>
+</body>
+</html>
